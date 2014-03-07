@@ -1,2 +1,2 @@
-FTP_client
+Computer Networks - Programming assignment #1
 ==========
