@@ -3,16 +3,19 @@
 // Author      : xkaras27
 // Version     :
 // Copyright   : none
-// Description : programming assignment 1: very basic FTP client
+// Description : programming assignment 1: list directory content
 //============================================================================
 
 #include <iostream>
 #include <cstdio>
 #include <cerrno>        //error codes
 #include <cstring>       //memset()
+#include <fstream>
 
 #include <regex.h>
 #include <unistd.h>      //sleep()
+#include <stdlib.h>
+#include  <stdio.h>
 
 #include <sys/socket.h>  //socket(), protocol families(AF_INET = IPv4)
 #include <sys/types.h>   //SOCK_STREAM
@@ -23,23 +26,24 @@ char msg[BUFFER_LEN];    //buffer for incoming messages
 
 using namespace std;
 
-string sendCommand(int socket, string command);
+string sendCommand(int socket, string command, bool wait);
 string get_port(string& answer);
+string form_string(char* input, int begin, int end);
 bool check_code(string& toBeChecked);
 int get_code(string& answer);
-string form_string(char* input, int begin, int end);
 bool parse(char* argv);
 bool change_directory(int socket);
 
-struct credentials {
+typedef struct credentials {
 	string username;
 	string password;
 	string hostname;
 	string path;
 	string port;
-};
+} Tcredentials;
 
-credentials destination;
+Tcredentials destination;
+FILE* fd_in;
 
 
 int main(int argc, char** argv) {
@@ -70,13 +74,12 @@ int main(int argc, char** argv) {
 		server_hostname = destination.hostname;
 
 
-//	cout << "Login: " << server_username << "Heslo: " << server_password << endl;
-//	cout << "Hostname: " << server_hostname << " " << "Port: " << server_port << endl;
-
-
 	int client_socket, data_socket;                   //sockets
 	struct sockaddr_in server_address, data_address;  //IP address info
 	struct hostent *server_ip;                        //DNS resolver
+    struct timeval timeout;
+    timeout.tv_sec = 10;
+    timeout.tv_usec = 0;
 
 	//setting server address for control connection (need to contact DNS)
 	memset(&server_address, 0, sizeof(server_address));
@@ -96,6 +99,11 @@ int main(int argc, char** argv) {
 		cerr << "socket: " << strerror(errno) << endl;
 		return 2;
 	}
+    if (setsockopt (client_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
+        cerr << "setsockopt: " << strerror(errno) << endl;
+        close(client_socket);
+        return 2;
+    }
 
 	//establishing control connection
 	if((connect(client_socket, (struct sockaddr *)&server_address, sizeof(server_address))) < 0) {
@@ -106,15 +114,15 @@ int main(int argc, char** argv) {
 
 	//communicating with the server
 	string answer;
-	answer = sendCommand(client_socket, server_username);
+	answer = sendCommand(client_socket, server_username, 1);
 	if(check_code(answer))
 		return 2;
 
-	answer = sendCommand(client_socket, server_password);
+	answer = sendCommand(client_socket, server_password, 1);
 	if(check_code(answer))
 			return 2;
 
-	answer = sendCommand(client_socket, "EPSV\r\n");
+	answer = sendCommand(client_socket, "EPSV\r\n", 1);
 	if(check_code(answer))
 			return 2;
 	string port = get_port(answer);
@@ -141,15 +149,18 @@ int main(int argc, char** argv) {
 			return 2;
 		}
 
-	answer = sendCommand(client_socket, "LIST\r\n");
+	answer = sendCommand(client_socket, "LIST\r\n", 1);
 	if(check_code(answer))
 		return 2;
-	usleep(400000);
+	// usleep(400000);
 
-	int in = recv(data_socket, msg, sizeof(msg), 0);
-	cout << msg;
+    FILE* fd_in = fdopen(data_socket, "r");
+    while(fgets(msg, BUFFER_LEN, fd_in) != NULL) {
+        cout << msg;
+    }
+    fclose(fd_in);
 
-	answer = sendCommand(client_socket, "QUIT\r\n");
+	answer = sendCommand(client_socket, "QUIT\r\n", 0);
 	if(check_code(answer))
 		return 2;
 
@@ -157,9 +168,11 @@ int main(int argc, char** argv) {
 	return 0;
 }
 
-
+/*
+ * Try to change directory, if fails, true is given
+ */
 bool change_directory(int socket) {
-	string answer = sendCommand(socket, "CWD " + destination.path + "\r\n");
+	string answer = sendCommand(socket, "CWD " + destination.path + "\r\n", 1);
 	if(check_code(answer))
 		return true;
 
@@ -284,20 +297,24 @@ string get_port(string& answer) {
 /*
  * Send command to a socket
  */
-string sendCommand(int socket, string command) {
+string sendCommand(int socket, string command, bool wait) {
 	int in, out;
-	memset(&msg, 0, sizeof(msg));
-	out = send(socket, command.c_str(), command.size(), 0);
-	usleep(400000);
-	in = recv(socket, msg, sizeof(msg), 0);
-	usleep(200000);
+	fd_in = fdopen(socket, "r");
 
+	out = send(socket, command.c_str(), command.size(), 0);
+	if(wait == 0)
+		return "";
+
+	usleep(100000);
+	while( fgets(msg, 2048, fd_in) != NULL	) {
+		cout << msg;
+		if(isdigit(msg[0]) && isdigit(msg[1]) && isdigit(msg[2]) && msg[3] == ' ')
+			break;
+	}
+	
+	 
 	//cast buffer to C++ string
 	string output = msg;
 	return output;
 }
-
-
-
-
-
+    
