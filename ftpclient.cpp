@@ -307,7 +307,7 @@ string sendCommand(int socket, string command, bool wait) {
 
 	usleep(100000);
 	while( fgets(msg, 2048, fd_in) != NULL	) {
-		cout << msg;
+		// cout << msg;
 		if(isdigit(msg[0]) && isdigit(msg[1]) && isdigit(msg[2]) && msg[3] == ' ')
 			break;
 	}
