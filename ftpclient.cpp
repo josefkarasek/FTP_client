@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include  <stdio.h>
 
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>  //socket(), protocol families(AF_INET = IPv4)
 #include <sys/types.h>   //SOCK_STREAM
 #include <netdb.h>       //DNS resolver
@@ -94,7 +96,7 @@ int main(int argc, char** argv) {
 	memcpy(&server_address.sin_addr, server_ip->h_addr_list[0], server_ip->h_length);
 
 	//creating socket
-	client_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
+	client_socket = socket(PF_INET, SOCK_STREAM, 0);
 	if(client_socket < 0) {
 		cerr << "socket: " << strerror(errno) << endl;
 		return 2;
@@ -133,7 +135,7 @@ int main(int argc, char** argv) {
 	data_address.sin_family = AF_INET;
 	data_address.sin_port = htons ( atoi(port.c_str()) );
 	memcpy(&data_address.sin_addr, server_ip->h_addr_list[0], server_ip->h_length);
-	data_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
+	data_socket = socket(PF_INET, SOCK_STREAM, 0);
 
 
 	//establishing data connection
