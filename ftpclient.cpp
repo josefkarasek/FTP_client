@@ -159,11 +159,11 @@ int main(int argc, char** argv) {
 
 	if(destination.path != "")
 		if(change_directory(client_socket)) {
-			cerr << "Error: Couldn't change working directory" << endl;
+			// cerr << "Error: Couldn't change working directory" << endl;
 			close(client_socket);
 			close(data_socket);
 			fclose(fd_control);
-			return 2;
+			return 0;
 		}
 
 	answer = sendCommand(client_socket, "LIST\r\n", 1);
@@ -274,6 +274,7 @@ bool check_code(string& toBeChecked) {
 	case 430: cerr << "Error: Invalid username or password." << endl;    error = true; break;
 	case 530: cerr << "Error: Please login with USER and PASS." << endl; error = true; break;
 	case 503: cerr << "Error: Bad sequence of commands." << endl;        error = true; break;
+	case 550: error = true; break;  //it's a stupid bullshit but gotta pretend everuthing's all right when failed to change direcotry
 	default:
 		if(code/100 == 5) {
 			cerr << "General failure." << endl;
