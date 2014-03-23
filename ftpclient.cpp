@@ -17,10 +17,11 @@
 #include <stdlib.h>
 #include  <stdio.h>
 
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>  //socket(), protocol families(AF_INET = IPv4)
 #include <sys/types.h>   //SOCK_STREAM
 #include <netdb.h>       //DNS resolver
-
 #define BUFFER_LEN 2048
 char msg[BUFFER_LEN];    //buffer for incoming messages
 
@@ -43,7 +44,7 @@ typedef struct credentials {
 } Tcredentials;
 
 Tcredentials destination;
-FILE* fd_in;
+FILE* fd_control;
 
 
 int main(int argc, char** argv) {
@@ -111,20 +112,31 @@ int main(int argc, char** argv) {
 		close(client_socket);
 		return 2;
 	}
-
 	//communicating with the server
 	string answer;
 	answer = sendCommand(client_socket, server_username, 1);
-	if(check_code(answer))
+	if(check_code(answer)) {
+		cerr << "Error: Couldn't send command" << endl;
+		close(client_socket);
+		fclose(fd_control);
 		return 2;
+	}
 
 	answer = sendCommand(client_socket, server_password, 1);
-	if(check_code(answer))
-			return 2;
+	if(check_code(answer)) {
+		cerr << "Error: Couldn't send command" << endl;
+		close(client_socket);
+		fclose(fd_control);
+		return 2;
+	}
 
 	answer = sendCommand(client_socket, "EPSV\r\n", 1);
-	if(check_code(answer))
-			return 2;
+	if(check_code(answer)) {
+		cerr << "Error: Couldn't send command" << endl;
+		close(client_socket);
+		fclose(fd_control);
+		return 2;
+	}
 	string port = get_port(answer);
 
 
@@ -139,32 +151,42 @@ int main(int argc, char** argv) {
 	//establishing data connection
 	if((connect(data_socket, (struct sockaddr *)&data_address, sizeof(data_address))) < 0) {
 		cerr << "connect: " << strerror(errno) << endl;
+		close(client_socket);
 		close(data_socket);
+		fclose(fd_control);
 		return 2;
 	}
 
 	if(destination.path != "")
 		if(change_directory(client_socket)) {
 			cerr << "Error: Couldn't change working directory" << endl;
+			close(client_socket);
+			close(data_socket);
+			fclose(fd_control);
 			return 2;
 		}
 
 	answer = sendCommand(client_socket, "LIST\r\n", 1);
-	if(check_code(answer))
+	if(check_code(answer)) {
+		cerr << "Error: Couldn't send LIST coomand" << endl;
+		close(client_socket);
+		close(data_socket);
+		fclose(fd_control);
 		return 2;
-	// usleep(400000);
+	}
 
-    FILE* fd_in = fdopen(data_socket, "r");
-    while(fgets(msg, BUFFER_LEN, fd_in) != NULL) {
+    FILE* fd_data = fdopen(data_socket, "r");
+    while(fgets(msg, BUFFER_LEN, fd_data) != NULL) {
         cout << msg;
     }
-    fclose(fd_in);
+    fclose(fd_data);
 
+    //ain't waintin' for no goodbye
 	answer = sendCommand(client_socket, "QUIT\r\n", 0);
-	if(check_code(answer))
-		return 2;
 
 	close(client_socket);
+	close(data_socket);
+	fclose(fd_control);
 	return 0;
 }
 
@@ -299,20 +321,17 @@ string get_port(string& answer) {
  */
 string sendCommand(int socket, string command, bool wait) {
 	int in, out;
-	fd_in = fdopen(socket, "r");
-
+	fd_control = fdopen(socket, "r");
 	out = send(socket, command.c_str(), command.size(), 0);
 	if(wait == 0)
 		return "";
 
 	usleep(100000);
-	while( fgets(msg, 2048, fd_in) != NULL	) {
+	while( fgets(msg, BUFFER_LEN, fd_control) != NULL	) {
 		// cout << msg;
 		if(isdigit(msg[0]) && isdigit(msg[1]) && isdigit(msg[2]) && msg[3] == ' ')
 			break;
 	}
-	
-	 
 	//cast buffer to C++ string
 	string output = msg;
 	return output;
